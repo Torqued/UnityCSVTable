@@ -10,12 +10,18 @@ public class GenerateTable : MonoBehaviour {
     public RectTransform rectTransform;
     public List<Row> rows;
 
+    private Row _loadedRow;
+    private int _displayedRows;
+    private int _currIndex;
+    private string _search;
 
     // Use this for initialization
     public void Start () {
+        GameObject rowPrefab = Resources.Load("Row") as GameObject;
+        _loadedRow = rowPrefab.GetComponent<Row>();
         GenerateTableRows("");
         searchInput.onValueChanged.AddListener(GenerateTableRows);
-        scrollbar.onValueChanged.AddListener(Virtualize);
+        scrollbar.onValueChanged.AddListener(AddNewRows);
         StartCoroutine(ResetScrollbar());
         
 	}
@@ -28,31 +34,40 @@ public class GenerateTable : MonoBehaviour {
         scrollbar.value = 1;
     }
 
-    public void Virtualize(float f)
+    public void AddNewRows(float f)
     {
-        string search = searchInput.text;
+        if (f < 0.05f)
+        {
+            AddRows();
+        }
     }
 
     public void GenerateTableRows(string search)
     {
+        _search = search;
+        _displayedRows = 0;
+        _currIndex = 0;
         for (int i = rows.Count - 1; i >= 0; i--)
         {
-            Row g = rows[i]; 
+            Row g = rows[i];
             rows.RemoveAt(i);
             Destroy(g.gameObject);
         }
+        AddRows();
+        StartCoroutine(ResetScrollbar());
+    }
 
-        
-        //Would be better to generate the rows at the start and just pick which ones to display
-        //All these loads + instantiates are bad(could reduce to one load and just reuse to instantiate)
-        int yOffset = 0;
-        foreach (BuildEntry be in CSVLoader.buildentries)
+    private void AddRows()
+    { 
+        int newLength = Mathf.Min(_currIndex + 10, CSVLoader.buildentries.Count);
+
+        for (int i = _currIndex; i < newLength; i++)
         {
+            BuildEntry be = CSVLoader.buildentries[i];
 
-            if (be.MatchSearch(search))
+            if (be.MatchSearch(_search))
             {
-                GameObject rowPrefab = Resources.Load("Row") as GameObject;
-                Row row = rowPrefab.GetComponent<Row>();
+
                 StringBuilder sb = new StringBuilder();
                 int count = 0;
                 foreach (string beTag in be.tags.Keys)
@@ -68,22 +83,28 @@ public class GenerateTable : MonoBehaviour {
                     }
                     count++;
                 }
-                row.SetChildrenData(be.sprite, be.displayName, be.description, sb.ToString());
-                Row newRow = Instantiate(row);
+                _loadedRow.SetChildrenData(be.sprite, be.displayName, be.description, sb.ToString());
+                Row newRow = Instantiate(_loadedRow);
 
                 newRow.transform.localScale = new Vector3(.5f, .5f);
-                newRow.transform.localPosition += new Vector3(0, -yOffset * 35, 0);
+                newRow.transform.localPosition += new Vector3(0, -_displayedRows * 35, 0);
                 newRow.transform.SetParent(transform, false);
-                yOffset++;
+                _displayedRows++;
                 rows.Add(newRow);
             }
+            else
+            {
+                newLength = Mathf.Min(newLength+1, CSVLoader.buildentries.Count);
+            }
+            _currIndex++;
+
         }
-        rectTransform.sizeDelta = new Vector2(rectTransform.sizeDelta.x,  Mathf.Max(150, yOffset*35));
-        StartCoroutine(ResetScrollbar());
+        rectTransform.sizeDelta = new Vector2(rectTransform.sizeDelta.x,  Mathf.Max(150, _displayedRows * 35));
     }
 
     void OnDestroy()
     {
         searchInput.onValueChanged.RemoveListener(GenerateTableRows);
+        scrollbar.onValueChanged.RemoveListener(AddNewRows);
     }
 }
